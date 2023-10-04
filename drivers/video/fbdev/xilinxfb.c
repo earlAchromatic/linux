@@ -273,7 +273,8 @@ static int xilinxfb_assign(struct platform_device *pdev,
 	if (drvdata->flags & BUS_ACCESS_FLAG) {
 		struct resource *res;
 
-		drvdata->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		drvdata->regs = devm_ioremap_resource(&pdev->dev, res);
 		if (IS_ERR(drvdata->regs))
 			return PTR_ERR(drvdata->regs);
 
@@ -468,7 +469,8 @@ static int xilinxfb_of_probe(struct platform_device *pdev)
 		pdata.yvirt = prop[1];
 	}
 
-	pdata.rotate_screen = of_property_read_bool(pdev->dev.of_node, "rotate-display");
+	if (of_find_property(pdev->dev.of_node, "rotate-display", NULL))
+		pdata.rotate_screen = 1;
 
 	platform_set_drvdata(pdev, drvdata);
 	return xilinxfb_assign(pdev, drvdata, &pdata);

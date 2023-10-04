@@ -5556,8 +5556,9 @@ def executeSuspend(quiet=False):
 		if not quiet:
 			pprint('CAPTURING TRACE')
 		op = sv.writeDatafileHeader(sv.ftracefile, testdata)
-		fp = open(tp+'trace', 'rb')
-		op.write(ascii(fp.read()))
+		fp = open(tp+'trace', 'r')
+		for line in fp:
+			op.write(line)
 		op.close()
 		sv.fsetVal('', 'trace')
 		sv.platforminfo(cmdafter)

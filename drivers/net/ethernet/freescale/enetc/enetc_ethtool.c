@@ -370,7 +370,8 @@ static const struct ethtool_rmon_hist_range enetc_rmon_ranges[] = {
 };
 
 static void enetc_rmon_stats(struct enetc_hw *hw, int mac,
-			     struct ethtool_rmon_stats *s)
+			     struct ethtool_rmon_stats *s,
+			     const struct ethtool_rmon_hist_range **ranges)
 {
 	s->undersize_pkts = enetc_port_rd(hw, ENETC_PM_RUND(mac));
 	s->oversize_pkts = enetc_port_rd(hw, ENETC_PM_ROVR(mac));
@@ -392,6 +393,8 @@ static void enetc_rmon_stats(struct enetc_hw *hw, int mac,
 	s->hist_tx[4] = enetc_port_rd(hw, ENETC_PM_T1023(mac));
 	s->hist_tx[5] = enetc_port_rd(hw, ENETC_PM_T1522(mac));
 	s->hist_tx[6] = enetc_port_rd(hw, ENETC_PM_T1523X(mac));
+
+	*ranges = enetc_rmon_ranges;
 }
 
 static void enetc_get_eth_mac_stats(struct net_device *ndev,
@@ -444,15 +447,13 @@ static void enetc_get_rmon_stats(struct net_device *ndev,
 	struct enetc_hw *hw = &priv->si->hw;
 	struct enetc_si *si = priv->si;
 
-	*ranges = enetc_rmon_ranges;
-
 	switch (rmon_stats->src) {
 	case ETHTOOL_MAC_STATS_SRC_EMAC:
-		enetc_rmon_stats(hw, 0, rmon_stats);
+		enetc_rmon_stats(hw, 0, rmon_stats, ranges);
 		break;
 	case ETHTOOL_MAC_STATS_SRC_PMAC:
 		if (si->hw_features & ENETC_SI_F_QBU)
-			enetc_rmon_stats(hw, 1, rmon_stats);
+			enetc_rmon_stats(hw, 1, rmon_stats, ranges);
 		break;
 	case ETHTOOL_MAC_STATS_SRC_AGGREGATE:
 		ethtool_aggregate_rmon_stats(ndev, rmon_stats);

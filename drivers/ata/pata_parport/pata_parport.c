@@ -381,7 +381,6 @@ static void pata_parport_dev_release(struct device *dev)
 {
 	struct pi_adapter *pi = container_of(dev, struct pi_adapter, dev);
 
-	ida_free(&pata_parport_bus_dev_ids, dev->id);
 	kfree(pi);
 }
 
@@ -434,27 +433,23 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 	if (bus_for_each_dev(&pata_parport_bus_type, NULL, &match, pi_find_dev))
 		return NULL;
 
-	id = ida_alloc(&pata_parport_bus_dev_ids, GFP_KERNEL);
-	if (id < 0)
-		return NULL;
-
 	pi = kzalloc(sizeof(struct pi_adapter), GFP_KERNEL);
-	if (!pi) {
-		ida_free(&pata_parport_bus_dev_ids, id);
+	if (!pi)
 		return NULL;
-	}
 
 	/* set up pi->dev before pi_probe_unit() so it can use dev_printk() */
 	pi->dev.parent = &pata_parport_bus;
 	pi->dev.bus = &pata_parport_bus_type;
 	pi->dev.driver = &pr->driver;
 	pi->dev.release = pata_parport_dev_release;
+	id = ida_alloc(&pata_parport_bus_dev_ids, GFP_KERNEL);
+	if (id < 0)
+		return NULL; /* pata_parport_dev_release will do kfree(pi) */
 	pi->dev.id = id;
 	dev_set_name(&pi->dev, "pata_parport.%u", pi->dev.id);
 	if (device_register(&pi->dev)) {
 		put_device(&pi->dev);
-		/* pata_parport_dev_release will do ida_free(dev->id) and kfree(pi) */
-		return NULL;
+		goto out_ida_free;
 	}
 
 	pi->proto = pr;
@@ -469,7 +464,8 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 	pi->port = parport->base;
 
 	par_cb.private = pi;
-	pi->pardev = parport_register_dev_model(parport, DRV_NAME, &par_cb, id);
+	pi->pardev = parport_register_dev_model(parport, DRV_NAME, &par_cb,
+						pi->dev.id);
 	if (!pi->pardev)
 		goto out_module_put;
 
@@ -491,13 +487,12 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 
 	pi_connect(pi);
 	if (ata_host_activate(host, 0, NULL, 0, &pata_parport_sht))
-		goto out_disconnect;
+		goto out_unreg_parport;
 
 	return pi;
 
-out_disconnect:
-	pi_disconnect(pi);
 out_unreg_parport:
+	pi_disconnect(pi);
 	parport_unregister_device(pi->pardev);
 	if (pi->proto->release_proto)
 		pi->proto->release_proto(pi);
@@ -505,7 +500,8 @@ out_module_put:
 	module_put(pi->proto->owner);
 out_unreg_dev:
 	device_unregister(&pi->dev);
-	/* pata_parport_dev_release will do ida_free(dev->id) and kfree(pi) */
+out_ida_free:
+	ida_free(&pata_parport_bus_dev_ids, pi->dev.id);
 	return NULL;
 }
 
@@ -630,7 +626,8 @@ static void pi_remove_one(struct device *dev)
 	pi_disconnect(pi);
 	pi_release(pi);
 	device_unregister(dev);
-	/* pata_parport_dev_release will do ida_free(dev->id) and kfree(pi) */
+	ida_free(&pata_parport_bus_dev_ids, dev->id);
+	/* pata_parport_dev_release will do kfree(pi) */
 }
 
 static ssize_t delete_device_store(struct bus_type *bus, const char *buf,
@@ -646,7 +643,6 @@ static ssize_t delete_device_store(struct bus_type *bus, const char *buf,
 	}
 
 	pi_remove_one(dev);
-	put_device(dev);
 	mutex_unlock(&pi_mutex);
 
 	return count;

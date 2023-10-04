@@ -40,7 +40,6 @@
  * @offset:	Offset to the first valid member in command structure.
  *		This will be the offset of the start of the command
  *		after command count field
- * @owner:	Registered module owner
  * @cmd_callback: Callback function to handle IOCTL. The callback has the
  *		command pointer with data for command. There is a pointer
  *		called write_only, which when set, will not copy the

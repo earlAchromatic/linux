@@ -393,7 +393,7 @@ static int cg3_probe(struct platform_device *op)
 
 	cg3_blank(FB_BLANK_UNBLANK, info);
 
-	if (!of_property_present(dp, "width")) {
+	if (!of_find_property(dp, "width", NULL)) {
 		err = cg3_do_default_mode(par);
 		if (err)
 			goto out_unmap_screen;

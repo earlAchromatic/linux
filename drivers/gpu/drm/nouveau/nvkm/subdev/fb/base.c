@@ -143,10 +143,6 @@ nvkm_fb_mem_unlock(struct nvkm_fb *fb)
 	if (!fb->func->vpr.scrub_required)
 		return 0;
 
-	ret = nvkm_subdev_oneinit(subdev);
-	if (ret)
-		return ret;
-
 	if (!fb->func->vpr.scrub_required(fb)) {
 		nvkm_debug(subdev, "VPR not locked\n");
 		return 0;
@@ -154,7 +150,7 @@ nvkm_fb_mem_unlock(struct nvkm_fb *fb)
 
 	nvkm_debug(subdev, "VPR locked, running scrubber binary\n");
 
-	if (!fb->vpr_scrubber.fw.img) {
+	if (!fb->vpr_scrubber.size) {
 		nvkm_warn(subdev, "VPR locked, but no scrubber binary!\n");
 		return 0;
 	}
@@ -233,7 +229,7 @@ nvkm_fb_dtor(struct nvkm_subdev *subdev)
 
 	nvkm_ram_del(&fb->ram);
 
-	nvkm_falcon_fw_dtor(&fb->vpr_scrubber);
+	nvkm_blob_dtor(&fb->vpr_scrubber);
 
 	if (fb->sysmem.flush_page) {
 		dma_unmap_page(subdev->device->dev, fb->sysmem.flush_page_addr,

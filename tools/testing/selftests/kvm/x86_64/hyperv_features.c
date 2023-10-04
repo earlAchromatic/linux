@@ -122,6 +122,7 @@ static void guest_test_msrs_access(void)
 {
 	struct kvm_cpuid2 *prev_cpuid = NULL;
 	struct kvm_vcpu *vcpu;
+	struct kvm_run *run;
 	struct kvm_vm *vm;
 	struct ucall uc;
 	int stage = 0;
@@ -149,6 +150,8 @@ static void guest_test_msrs_access(void)
 
 		vm_init_descriptor_tables(vm);
 		vcpu_init_descriptor_tables(vcpu);
+
+		run = vcpu->run;
 
 		/* TODO: Make this entire test easier to maintain. */
 		if (stage >= 21)
@@ -491,7 +494,9 @@ static void guest_test_msrs_access(void)
 			 msr->idx, msr->write ? "write" : "read");
 
 		vcpu_run(vcpu);
-		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+		TEST_ASSERT(run->exit_reason == KVM_EXIT_IO,
+			    "unexpected exit reason: %u (%s)",
+			    run->exit_reason, exit_reason_str(run->exit_reason));
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_ABORT:
@@ -513,6 +518,7 @@ static void guest_test_hcalls_access(void)
 {
 	struct kvm_cpuid2 *prev_cpuid = NULL;
 	struct kvm_vcpu *vcpu;
+	struct kvm_run *run;
 	struct kvm_vm *vm;
 	struct ucall uc;
 	int stage = 0;
@@ -543,6 +549,8 @@ static void guest_test_hcalls_access(void)
 		} else {
 			vcpu_init_cpuid(vcpu, prev_cpuid);
 		}
+
+		run = vcpu->run;
 
 		switch (stage) {
 		case 0:
@@ -661,7 +669,9 @@ static void guest_test_hcalls_access(void)
 		pr_debug("Stage %d: testing hcall: 0x%lx\n", stage, hcall->control);
 
 		vcpu_run(vcpu);
-		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+		TEST_ASSERT(run->exit_reason == KVM_EXIT_IO,
+			    "unexpected exit reason: %u (%s)",
+			    run->exit_reason, exit_reason_str(run->exit_reason));
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_ABORT:

@@ -156,6 +156,7 @@ int main(int argc, char *argv[])
 	vm_vaddr_t hcall_page;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
+	struct kvm_run *run;
 	struct ucall uc;
 	int stage;
 
@@ -164,6 +165,7 @@ int main(int argc, char *argv[])
 	/* Create VM */
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 	vcpu_set_hv_cpuid(vcpu);
+	run = vcpu->run;
 	vcpu_alloc_svm(vm, &nested_gva);
 	vcpu_alloc_hyperv_test_pages(vm, &hv_pages_gva);
 
@@ -175,7 +177,10 @@ int main(int argc, char *argv[])
 
 	for (stage = 1;; stage++) {
 		vcpu_run(vcpu);
-		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+		TEST_ASSERT(run->exit_reason == KVM_EXIT_IO,
+			    "Stage %d: unexpected exit reason: %u (%s),\n",
+			    stage, run->exit_reason,
+			    exit_reason_str(run->exit_reason));
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_ABORT:

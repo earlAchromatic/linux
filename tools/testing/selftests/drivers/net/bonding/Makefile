@@ -8,8 +8,7 @@ TEST_PROGS := \
 	dev_addr_lists.sh \
 	mode-1-recovery-updelay.sh \
 	mode-2-recovery-updelay.sh \
-	option_prio.sh \
-	bond-eth-type-change.sh
+	option_prio.sh
 
 TEST_FILES := \
 	lag_lib.sh \

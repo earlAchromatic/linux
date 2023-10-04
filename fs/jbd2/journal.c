@@ -969,13 +969,10 @@ int jbd2_journal_bmap(journal_t *journal, unsigned long blocknr,
 {
 	int err = 0;
 	unsigned long long ret;
-	sector_t block = blocknr;
+	sector_t block = 0;
 
-	if (journal->j_bmap) {
-		err = journal->j_bmap(journal, &block);
-		if (err == 0)
-			*retp = block;
-	} else if (journal->j_inode) {
+	if (journal->j_inode) {
+		block = blocknr;
 		ret = bmap(journal->j_inode, &block);
 
 		if (ret || !block) {

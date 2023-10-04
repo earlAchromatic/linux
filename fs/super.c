@@ -475,21 +475,12 @@ void generic_shutdown_super(struct super_block *sb)
 
 		cgroup_writeback_umount();
 
-		/* Evict all inodes with zero refcount. */
+		/* evict all inodes with zero refcount */
 		evict_inodes(sb);
-
-		/*
-		 * Clean up and evict any inodes that still have references due
-		 * to fsnotify or the security policy.
-		 */
+		/* only nonzero refcount inodes can have marks */
 		fsnotify_sb_delete(sb);
-		security_sb_delete(sb);
-
-		/*
-		 * Now that all potentially-encrypted inodes have been evicted,
-		 * the fscrypt keyring can be destroyed.
-		 */
 		fscrypt_destroy_keyring(sb);
+		security_sb_delete(sb);
 
 		if (sb->s_dio_done_wq) {
 			destroy_workqueue(sb->s_dio_done_wq);

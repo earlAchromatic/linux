@@ -5726,28 +5726,6 @@ static struct inode *ext4_get_journal_inode(struct super_block *sb,
 	return journal_inode;
 }
 
-static int ext4_journal_bmap(journal_t *journal, sector_t *block)
-{
-	struct ext4_map_blocks map;
-	int ret;
-
-	if (journal->j_inode == NULL)
-		return 0;
-
-	map.m_lblk = *block;
-	map.m_len = 1;
-	ret = ext4_map_blocks(NULL, journal->j_inode, &map, 0);
-	if (ret <= 0) {
-		ext4_msg(journal->j_inode->i_sb, KERN_CRIT,
-			 "journal bmap failed: block %llu ret %d\n",
-			 *block, ret);
-		jbd2_journal_abort(journal, ret ? ret : -EIO);
-		return ret;
-	}
-	*block = map.m_pblk;
-	return 0;
-}
-
 static journal_t *ext4_get_journal(struct super_block *sb,
 				   unsigned int journal_inum)
 {
@@ -5768,7 +5746,6 @@ static journal_t *ext4_get_journal(struct super_block *sb,
 		return NULL;
 	}
 	journal->j_private = sb;
-	journal->j_bmap = ext4_journal_bmap;
 	ext4_init_journal_params(sb, journal);
 	return journal;
 }
@@ -5943,7 +5920,6 @@ static int ext4_load_journal(struct super_block *sb,
 		err = jbd2_journal_wipe(journal, !really_read_only);
 	if (!err) {
 		char *save = kmalloc(EXT4_S_ERR_LEN, GFP_KERNEL);
-
 		if (save)
 			memcpy(save, ((char *) es) +
 			       EXT4_S_ERR_START, EXT4_S_ERR_LEN);
@@ -5952,14 +5928,6 @@ static int ext4_load_journal(struct super_block *sb,
 			memcpy(((char *) es) + EXT4_S_ERR_START,
 			       save, EXT4_S_ERR_LEN);
 		kfree(save);
-		es->s_state |= cpu_to_le16(EXT4_SB(sb)->s_mount_state &
-					   EXT4_ERROR_FS);
-		/* Write out restored error information to the superblock */
-		if (!bdev_read_only(sb->s_bdev)) {
-			int err2;
-			err2 = ext4_commit_super(sb);
-			err = err ? : err2;
-		}
 	}
 
 	if (err) {
@@ -6189,13 +6157,11 @@ static int ext4_clear_journal_err(struct super_block *sb,
 		errstr = ext4_decode_error(sb, j_errno, nbuf);
 		ext4_warning(sb, "Filesystem error recorded "
 			     "from previous mount: %s", errstr);
+		ext4_warning(sb, "Marking fs in need of filesystem check.");
 
 		EXT4_SB(sb)->s_mount_state |= EXT4_ERROR_FS;
 		es->s_state |= cpu_to_le16(EXT4_ERROR_FS);
-		j_errno = ext4_commit_super(sb);
-		if (j_errno)
-			return j_errno;
-		ext4_warning(sb, "Marked fs in need of filesystem check.");
+		ext4_commit_super(sb);
 
 		jbd2_journal_clear_err(journal);
 		jbd2_journal_update_sb_errno(journal);

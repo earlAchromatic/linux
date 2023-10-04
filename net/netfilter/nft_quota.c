@@ -236,16 +236,12 @@ static void nft_quota_destroy(const struct nft_ctx *ctx,
 static int nft_quota_clone(struct nft_expr *dst, const struct nft_expr *src)
 {
 	struct nft_quota *priv_dst = nft_expr_priv(dst);
-	struct nft_quota *priv_src = nft_expr_priv(src);
-
-	priv_dst->quota = priv_src->quota;
-	priv_dst->flags = priv_src->flags;
 
 	priv_dst->consumed = kmalloc(sizeof(*priv_dst->consumed), GFP_ATOMIC);
 	if (!priv_dst->consumed)
 		return -ENOMEM;
 
-	*priv_dst->consumed = *priv_src->consumed;
+	atomic64_set(priv_dst->consumed, 0);
 
 	return 0;
 }

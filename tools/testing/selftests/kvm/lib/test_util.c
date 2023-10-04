@@ -165,33 +165,26 @@ size_t get_trans_hugepagesz(void)
 size_t get_def_hugetlb_pagesz(void)
 {
 	char buf[64];
-	const char *hugepagesize = "Hugepagesize:";
-	const char *hugepages_total = "HugePages_Total:";
+	const char *tag = "Hugepagesize:";
 	FILE *f;
 
 	f = fopen("/proc/meminfo", "r");
 	TEST_ASSERT(f != NULL, "Error in opening /proc/meminfo");
 
 	while (fgets(buf, sizeof(buf), f) != NULL) {
-		if (strstr(buf, hugepages_total) == buf) {
-			unsigned long long total = strtoull(buf + strlen(hugepages_total), NULL, 10);
-			if (!total) {
-				fprintf(stderr, "HUGETLB is not enabled in /proc/sys/vm/nr_hugepages\n");
-				exit(KSFT_SKIP);
-			}
-		}
-		if (strstr(buf, hugepagesize) == buf) {
+		if (strstr(buf, tag) == buf) {
 			fclose(f);
-			return strtoull(buf + strlen(hugepagesize), NULL, 10) << 10;
+			return strtoull(buf + strlen(tag), NULL, 10) << 10;
 		}
 	}
 
-	if (feof(f)) {
-		fprintf(stderr, "HUGETLB is not configured in host kernel");
-		exit(KSFT_SKIP);
-	}
+	if (feof(f))
+		TEST_FAIL("HUGETLB is not configured in host kernel");
+	else
+		TEST_FAIL("Error in reading /proc/meminfo");
 
-	TEST_FAIL("Error in reading /proc/meminfo");
+	fclose(f);
+	return 0;
 }
 
 #define ANON_FLAGS	(MAP_PRIVATE | MAP_ANONYMOUS)

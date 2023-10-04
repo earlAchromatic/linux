@@ -5,10 +5,12 @@
 #include <errno.h>
 #include <linux/capability.h>
 
-typedef struct { unsigned long long val; } kernel_cap_t;
+struct kernel_cap_struct {
+	__u64 val;
+} __attribute__((preserve_access_index));
 
 struct cred {
-	kernel_cap_t cap_effective;
+	struct kernel_cap_struct cap_effective;
 } __attribute__((preserve_access_index));
 
 char _license[] SEC("license") = "GPL";
@@ -16,8 +18,8 @@ char _license[] SEC("license") = "GPL";
 SEC("lsm.s/userns_create")
 int BPF_PROG(test_userns_create, const struct cred *cred, int ret)
 {
-	kernel_cap_t caps = cred->cap_effective;
-	__u64 cap_mask = 1ULL << CAP_SYS_ADMIN;
+	struct kernel_cap_struct caps = cred->cap_effective;
+	__u64 cap_mask = BIT_LL(CAP_SYS_ADMIN);
 
 	if (ret)
 		return 0;

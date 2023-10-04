@@ -5099,21 +5099,35 @@ static inline bool mas_rewind_node(struct ma_state *mas)
  */
 static inline bool mas_skip_node(struct ma_state *mas)
 {
-	if (mas_is_err(mas))
-		return false;
+	unsigned char slot, slot_count;
+	unsigned long *pivots;
+	enum maple_type mt;
 
+	mt = mte_node_type(mas->node);
+	slot_count = mt_slots[mt] - 1;
 	do {
 		if (mte_is_root(mas->node)) {
-			if (mas->offset >= mas_data_end(mas)) {
+			slot = mas->offset;
+			if (slot > slot_count) {
 				mas_set_err(mas, -EBUSY);
 				return false;
 			}
 		} else {
 			mas_ascend(mas);
+			slot = mas->offset;
+			mt = mte_node_type(mas->node);
+			slot_count = mt_slots[mt] - 1;
 		}
-	} while (mas->offset >= mas_data_end(mas));
+	} while (slot > slot_count);
 
-	mas->offset++;
+	mas->offset = ++slot;
+	pivots = ma_pivots(mas_mn(mas), mt);
+	if (slot > 0)
+		mas->min = pivots[slot - 1] + 1;
+
+	if (slot <= slot_count)
+		mas->max = pivots[slot];
+
 	return true;
 }
 

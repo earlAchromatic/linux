@@ -450,9 +450,7 @@ static struct file_system_type sock_fs_type = {
  *
  *	Returns the &file bound with @sock, implicitly storing it
  *	in sock->file. If dname is %NULL, sets to "".
- *
- *	On failure @sock is released, and an ERR pointer is returned.
- *
+ *	On failure the return is a ERR pointer (see linux/err.h).
  *	This function uses GFP_KERNEL internally.
  */
 
@@ -1640,6 +1638,7 @@ static struct socket *__sys_socket_create(int family, int type, int protocol)
 struct file *__sys_socket_file(int family, int type, int protocol)
 {
 	struct socket *sock;
+	struct file *file;
 	int flags;
 
 	sock = __sys_socket_create(family, type, protocol);
@@ -1650,7 +1649,11 @@ struct file *__sys_socket_file(int family, int type, int protocol)
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
-	return sock_alloc_file(sock, flags, NULL);
+	file = sock_alloc_file(sock, flags, NULL);
+	if (IS_ERR(file))
+		sock_release(sock);
+
+	return file;
 }
 
 int __sys_socket(int family, int type, int protocol)

@@ -469,6 +469,14 @@ int mlx5e_ktls_add_tx(struct net_device *netdev, struct sock *sk,
 	if (IS_ERR(priv_tx))
 		return PTR_ERR(priv_tx);
 
+	dek = mlx5_ktls_create_key(priv->tls->dek_pool, crypto_info);
+	if (IS_ERR(dek)) {
+		err = PTR_ERR(dek);
+		goto err_create_key;
+	}
+	priv_tx->dek = dek;
+
+	priv_tx->expected_seq = start_offload_tcp_sn;
 	switch (crypto_info->cipher_type) {
 	case TLS_CIPHER_AES_GCM_128:
 		priv_tx->crypto_info.crypto_info_128 =
@@ -481,18 +489,8 @@ int mlx5e_ktls_add_tx(struct net_device *netdev, struct sock *sk,
 	default:
 		WARN_ONCE(1, "Unsupported cipher type %u\n",
 			  crypto_info->cipher_type);
-		err = -EOPNOTSUPP;
-		goto err_pool_push;
+		return -EOPNOTSUPP;
 	}
-
-	dek = mlx5_ktls_create_key(priv->tls->dek_pool, crypto_info);
-	if (IS_ERR(dek)) {
-		err = PTR_ERR(dek);
-		goto err_pool_push;
-	}
-
-	priv_tx->dek = dek;
-	priv_tx->expected_seq = start_offload_tcp_sn;
 	priv_tx->tx_ctx = tls_offload_ctx_tx(tls_ctx);
 
 	mlx5e_set_ktls_tx_priv_ctx(tls_ctx, priv_tx);
@@ -502,7 +500,7 @@ int mlx5e_ktls_add_tx(struct net_device *netdev, struct sock *sk,
 
 	return 0;
 
-err_pool_push:
+err_create_key:
 	pool_push(pool, priv_tx);
 	return err;
 }

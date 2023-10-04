@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
 
 import argparse
 import collections
 import os
 import yaml
 
-from lib import SpecFamily, SpecAttrSet, SpecAttr, SpecOperation, SpecEnumSet, SpecEnumEntry
+from lib import SpecFamily, SpecAttrSet, SpecAttr, SpecOperation
 
 
 def c_upper(name):
@@ -567,37 +566,97 @@ class Struct:
         self.inherited = [c_lower(x) for x in sorted(self._inherited)]
 
 
-class EnumEntry(SpecEnumEntry):
+class EnumEntry:
     def __init__(self, enum_set, yaml, prev, value_start):
-        super().__init__(enum_set, yaml, prev, value_start)
-
-        if prev:
-            self.value_change = (self.value != prev.value + 1)
+        if isinstance(yaml, str):
+            self.name = yaml
+            yaml = {}
+            self.doc = ''
         else:
+            self.name = yaml['name']
+            self.doc = yaml.get('doc', '')
+
+        self.yaml = yaml
+        self.enum_set = enum_set
+        self.c_name = c_upper(enum_set.value_pfx + self.name)
+
+        if 'value' in yaml:
+            self.value = yaml['value']
+            if prev:
+                self.value_change = (self.value != prev.value + 1)
+        elif prev:
+            self.value_change = False
+            self.value = prev.value + 1
+        else:
+            self.value = value_start
             self.value_change = (self.value != 0)
+
         self.value_change = self.value_change or self.enum_set['type'] == 'flags'
 
-        # Added by resolve:
-        self.c_name = None
-        delattr(self, "c_name")
+    def __getitem__(self, key):
+        return self.yaml[key]
 
-    def resolve(self):
-        self.resolve_up(super())
+    def __contains__(self, key):
+        return key in self.yaml
 
-        self.c_name = c_upper(self.enum_set.value_pfx + self.name)
+    def has_doc(self):
+        return bool(self.doc)
+
+    # raw value, i.e. the id in the enum, unlike user value which is a mask for flags
+    def raw_value(self):
+        return self.value
+
+    # user value, same as raw value for enums, for flags it's the mask
+    def user_value(self):
+        if self.enum_set['type'] == 'flags':
+            return 1 << self.value
+        else:
+            return self.value
 
 
-class EnumSet(SpecEnumSet):
+class EnumSet:
     def __init__(self, family, yaml):
+        self.yaml = yaml
+        self.family = family
+
         self.render_name = c_lower(family.name + '-' + yaml['name'])
         self.enum_name = 'enum ' + self.render_name
 
         self.value_pfx = yaml.get('name-prefix', f"{family.name}-{yaml['name']}-")
 
-        super().__init__(family, yaml)
+        self.type = yaml['type']
 
-    def new_entry(self, entry, prev_entry, value_start):
-        return EnumEntry(self, entry, prev_entry, value_start)
+        prev_entry = None
+        value_start = self.yaml.get('value-start', 0)
+        self.entries = {}
+        self.entry_list = []
+        for entry in self.yaml['entries']:
+            e = EnumEntry(self, entry, prev_entry, value_start)
+            self.entries[e.name] = e
+            self.entry_list.append(e)
+            prev_entry = e
+
+    def __getitem__(self, key):
+        return self.yaml[key]
+
+    def __contains__(self, key):
+        return key in self.yaml
+
+    def has_doc(self):
+        if 'doc' in self.yaml:
+            return True
+        for entry in self.entry_list:
+            if entry.has_doc():
+                return True
+        return False
+
+    def get_mask(self):
+        mask = 0
+        idx = self.yaml.get('value-start', 0)
+        for _ in self.entry_list:
+            mask |= 1 << idx
+            idx += 1
+        return mask
 
 
 class AttrSet(SpecAttrSet):
@@ -732,6 +791,8 @@ class Family(SpecFamily):
 
         self.mcgrps = self.yaml.get('mcast-groups', {'list': []})
 
+        self.consts = dict()
+
         self.hooks = dict()
         for when in ['pre', 'post']:
             self.hooks[when] = dict()
@@ -758,9 +819,6 @@ class Family(SpecFamily):
         if self.kernel_policy == 'global':
             self._load_global_policy()
 
-    def new_enum(self, elem):
-        return EnumSet(self, elem)
-
     def new_attr_set(self, elem):
         return AttrSet(self, elem)
 
@@ -778,6 +836,12 @@ class Family(SpecFamily):
                 }
 
     def _dictify(self):
+        for elem in self.yaml['definitions']:
+            if elem['type'] == 'enum' or elem['type'] == 'flags':
+                self.consts[elem['name']] = EnumSet(self, elem)
+            else:
+                self.consts[elem['name']] = elem
+
         ntf = []
         for msg in self.msgs.values():
             if 'notify' in msg:
@@ -1915,7 +1979,7 @@ def render_uapi(family, cw):
                 if 'doc' in enum:
                     doc = ' - ' + enum['doc']
                 cw.write_doc_line(enum.enum_name + doc)
-                for entry in enum.entries.values():
+                for entry in enum.entry_list:
                     if entry.has_doc():
                         doc = '@' + entry.c_name + ': ' + entry['doc']
                         cw.write_doc_line(doc)
@@ -1923,7 +1987,7 @@ def render_uapi(family, cw):
 
             uapi_enum_start(family, cw, const, 'name')
             name_pfx = const.get('name-prefix', f"{family.name}-{const['name']}-")
-            for entry in enum.entries.values():
+            for entry in enum.entry_list:
                 suffix = ','
                 if entry.value_change:
                     suffix = f" = {entry.user_value()}" + suffix
@@ -1931,14 +1995,9 @@ def render_uapi(family, cw):
 
             if const.get('render-max', False):
                 cw.nl()
-                if const['type'] == 'flags':
-                    max_name = c_upper(name_pfx + 'mask')
-                    max_val = f' = {enum.get_mask()},'
-                    cw.p(max_name + max_val)
-                else:
-                    max_name = c_upper(name_pfx + 'max')
-                    cw.p('__' + max_name + ',')
-                    cw.p(max_name + ' = (__' + max_name + ' - 1)')
+                max_name = c_upper(name_pfx + 'max')
+                cw.p('__' + max_name + ',')
+                cw.p(max_name + ' = (__' + max_name + ' - 1)')
             cw.block_end(line=';')
             cw.nl()
         elif const['type'] == 'const':
@@ -1985,17 +2044,14 @@ def render_uapi(family, cw):
     max_value = f"({cnt_name} - 1)"
 
     uapi_enum_start(family, cw, family['operations'], 'enum-name')
-    val = 0
     for op in family.msgs.values():
         if separate_ntf and ('notify' in op or 'event' in op):
             continue
 
         suffix = ','
-        if op.value != val:
-            suffix = f" = {op.value},"
-            val = op.value
+        if 'value' in op:
+            suffix = f" = {op['value']},"
         cw.p(op.enum_name + suffix)
-        val += 1
     cw.nl()
     cw.p(cnt_name + ('' if max_by_define else ','))
     if not max_by_define:
@@ -2059,10 +2115,6 @@ def main():
 
     try:
         parsed = Family(args.spec)
-        if parsed.license != '((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)':
-            print('Spec license:', parsed.license)
-            print('License must be: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)')
-            os.sys.exit(1)
     except yaml.YAMLError as exc:
         print(exc)
         os.sys.exit(1)
@@ -2071,10 +2123,13 @@ def main():
     cw = CodeWriter(BaseNlLib(), out_file)
 
     _, spec_kernel = find_kernel_root(args.spec)
-    if args.mode == 'uapi' or args.header:
-        cw.p(f'/* SPDX-License-Identifier: {parsed.license} */')
+    if args.mode == 'uapi':
+        cw.p('/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */')
     else:
-        cw.p(f'// SPDX-License-Identifier: {parsed.license}')
+        if args.header:
+            cw.p('/* SPDX-License-Identifier: BSD-3-Clause */')
+        else:
+            cw.p('// SPDX-License-Identifier: BSD-3-Clause')
     cw.p("/* Do not edit directly, auto-generated from: */")
     cw.p(f"/*\t{spec_kernel} */")
     cw.p(f"/* YNL-GEN {args.mode} {'header' if args.header else 'source'} */")
