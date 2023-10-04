@@ -163,8 +163,9 @@ TEST_F(mdwe, mprotect_WRITE_EXEC)
 
 TEST_F(mdwe, mmap_FIXED)
 {
-	void *p;
+	void *p, *p2;
 
+	p2 = mmap(NULL, self->size, PROT_READ | PROT_EXEC, self->flags, 0, 0);
 	self->p = mmap(NULL, self->size, PROT_READ, self->flags, 0, 0);
 	ASSERT_NE(self->p, MAP_FAILED);
 

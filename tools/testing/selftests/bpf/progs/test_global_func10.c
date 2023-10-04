@@ -5,12 +5,12 @@
 #include "bpf_misc.h"
 
 struct Small {
-	long x;
+	int x;
 };
 
 struct Big {
-	long x;
-	long y;
+	int x;
+	int y;
 };
 
 __noinline int foo(const struct Big *big)
@@ -22,7 +22,7 @@ __noinline int foo(const struct Big *big)
 }
 
 SEC("cgroup_skb/ingress")
-__failure __msg("invalid indirect access to stack")
+__failure __msg("invalid indirect read from stack")
 int global_func10(struct __sk_buff *skb)
 {
 	const struct Small small = {.x = skb->len };

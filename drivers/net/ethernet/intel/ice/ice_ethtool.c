@@ -4331,8 +4331,6 @@ ice_get_module_eeprom(struct net_device *netdev,
 		 * SFP modules only ever use page 0.
 		 */
 		if (page == 0 || !(data[0x2] & 0x4)) {
-			u32 copy_len;
-
 			/* If i2c bus is busy due to slow page change or
 			 * link management access, call can fail. This is normal.
 			 * So we retry this a few times.
@@ -4356,8 +4354,8 @@ ice_get_module_eeprom(struct net_device *netdev,
 			}
 
 			/* Make sure we have enough room for the new block */
-			copy_len = min_t(u32, SFF_READ_BLOCK_SIZE, ee->len - i);
-			memcpy(data + i, value, copy_len);
+			if ((i + SFF_READ_BLOCK_SIZE) < ee->len)
+				memcpy(data + i, value, SFF_READ_BLOCK_SIZE);
 		}
 	}
 	return 0;

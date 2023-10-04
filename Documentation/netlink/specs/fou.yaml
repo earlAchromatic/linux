@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
-
 name: fou
 
 protocol: genetlink-legacy
@@ -28,7 +26,6 @@ attribute-sets:
       -
         name: unspec
         type: unused
-        value: 0
       -
         name: port
         type: u16
@@ -74,7 +71,6 @@ operations:
     -
       name: unspec
       doc: unused
-      value: 0
 
     -
       name: add

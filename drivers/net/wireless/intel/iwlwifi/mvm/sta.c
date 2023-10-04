@@ -384,11 +384,8 @@ static int iwl_mvm_disable_txq(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 		struct iwl_mvm_txq *mvmtxq =
 			iwl_mvm_txq_from_tid(sta, tid);
 
-		spin_lock_bh(&mvm->add_stream_lock);
-		list_del_init(&mvmtxq->list);
-		clear_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state);
 		mvmtxq->txq_id = IWL_MVM_INVALID_QUEUE;
-		spin_unlock_bh(&mvm->add_stream_lock);
+		list_del_init(&mvmtxq->list);
 	}
 
 	/* Regardless if this is a reserved TXQ for a STA - mark it as false */
@@ -482,11 +479,8 @@ static int iwl_mvm_remove_sta_queue_marking(struct iwl_mvm *mvm, int queue)
 			disable_agg_tids |= BIT(tid);
 		mvmsta->tid_data[tid].txq_id = IWL_MVM_INVALID_QUEUE;
 
-		spin_lock_bh(&mvm->add_stream_lock);
-		list_del_init(&mvmtxq->list);
-		clear_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state);
 		mvmtxq->txq_id = IWL_MVM_INVALID_QUEUE;
-		spin_unlock_bh(&mvm->add_stream_lock);
+		list_del_init(&mvmtxq->list);
 	}
 
 	mvmsta->tfd_queue_msk &= ~BIT(queue); /* Don't use this queue anymore */
@@ -699,7 +693,7 @@ static int iwl_mvm_redirect_queue(struct iwl_mvm *mvm, int queue, int tid,
 			    queue, iwl_mvm_ac_to_tx_fifo[ac]);
 
 	/* Stop the queue and wait for it to empty */
-	set_bit(IWL_MVM_TXQ_STATE_STOP_REDIRECT, &txq->state);
+	txq->stopped = true;
 
 	ret = iwl_trans_wait_tx_queues_empty(mvm->trans, BIT(queue));
 	if (ret) {
@@ -742,7 +736,7 @@ static int iwl_mvm_redirect_queue(struct iwl_mvm *mvm, int queue, int tid,
 
 out:
 	/* Continue using the queue */
-	clear_bit(IWL_MVM_TXQ_STATE_STOP_REDIRECT, &txq->state);
+	txq->stopped = false;
 
 	return ret;
 }
@@ -1450,22 +1444,12 @@ void iwl_mvm_add_new_dqa_stream_wk(struct work_struct *wk)
 		 * a queue in the function itself.
 		 */
 		if (iwl_mvm_sta_alloc_queue(mvm, txq->sta, txq->ac, tid)) {
-			spin_lock_bh(&mvm->add_stream_lock);
 			list_del_init(&mvmtxq->list);
-			spin_unlock_bh(&mvm->add_stream_lock);
 			continue;
 		}
 
-		/* now we're ready, any remaining races/concurrency will be
-		 * handled in iwl_mvm_mac_itxq_xmit()
-		 */
-		set_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state);
-
-		local_bh_disable();
-		spin_lock(&mvm->add_stream_lock);
 		list_del_init(&mvmtxq->list);
-		spin_unlock(&mvm->add_stream_lock);
-
+		local_bh_disable();
 		iwl_mvm_mac_itxq_xmit(mvm->hw, txq);
 		local_bh_enable();
 	}
@@ -1880,11 +1864,8 @@ static void iwl_mvm_disable_sta_queues(struct iwl_mvm *mvm,
 		struct iwl_mvm_txq *mvmtxq =
 			iwl_mvm_txq_from_mac80211(sta->txq[i]);
 
-		spin_lock_bh(&mvm->add_stream_lock);
 		mvmtxq->txq_id = IWL_MVM_INVALID_QUEUE;
 		list_del_init(&mvmtxq->list);
-		clear_bit(IWL_MVM_TXQ_STATE_READY, &mvmtxq->state);
-		spin_unlock_bh(&mvm->add_stream_lock);
 	}
 }
 

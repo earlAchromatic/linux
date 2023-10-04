@@ -2,7 +2,6 @@
 #ifndef __NVKM_FB_H__
 #define __NVKM_FB_H__
 #include <core/subdev.h>
-#include <core/falcon.h>
 #include <core/mm.h>
 
 /* memory type/access flags, do not match hardware values */
@@ -34,7 +33,7 @@ struct nvkm_fb {
 	const struct nvkm_fb_func *func;
 	struct nvkm_subdev subdev;
 
-	struct nvkm_falcon_fw vpr_scrubber;
+	struct nvkm_blob vpr_scrubber;
 
 	struct {
 		struct page *flush_page;

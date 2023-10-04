@@ -720,10 +720,7 @@ __diag_ignore_all("-Wmissing-prototypes",
  * @ctx: XDP context pointer.
  * @timestamp: Return value pointer.
  *
- * Return:
- * * Returns 0 on success or ``-errno`` on error.
- * * ``-EOPNOTSUPP`` : means device driver does not implement kfunc
- * * ``-ENODATA``    : means no RX-timestamp available for this frame
+ * Returns 0 on success or ``-errno`` on error.
  */
 __bpf_kfunc int bpf_xdp_metadata_rx_timestamp(const struct xdp_md *ctx, u64 *timestamp)
 {
@@ -735,10 +732,7 @@ __bpf_kfunc int bpf_xdp_metadata_rx_timestamp(const struct xdp_md *ctx, u64 *tim
  * @ctx: XDP context pointer.
  * @hash: Return value pointer.
  *
- * Return:
- * * Returns 0 on success or ``-errno`` on error.
- * * ``-EOPNOTSUPP`` : means device driver doesn't implement kfunc
- * * ``-ENODATA``    : means no RX-hash available for this frame
+ * Returns 0 on success or ``-errno`` on error.
  */
 __bpf_kfunc int bpf_xdp_metadata_rx_hash(const struct xdp_md *ctx, u32 *hash)
 {
@@ -780,34 +774,20 @@ static int __init xdp_metadata_init(void)
 }
 late_initcall(xdp_metadata_init);
 
-void xdp_set_features_flag(struct net_device *dev, xdp_features_t val)
-{
-	val &= NETDEV_XDP_ACT_MASK;
-	if (dev->xdp_features == val)
-		return;
-
-	dev->xdp_features = val;
-
-	if (dev->reg_state == NETREG_REGISTERED)
-		call_netdevice_notifiers(NETDEV_XDP_FEAT_CHANGE, dev);
-}
-EXPORT_SYMBOL_GPL(xdp_set_features_flag);
-
 void xdp_features_set_redirect_target(struct net_device *dev, bool support_sg)
 {
-	xdp_features_t val = (dev->xdp_features | NETDEV_XDP_ACT_NDO_XMIT);
-
+	dev->xdp_features |= NETDEV_XDP_ACT_NDO_XMIT;
 	if (support_sg)
-		val |= NETDEV_XDP_ACT_NDO_XMIT_SG;
-	xdp_set_features_flag(dev, val);
+		dev->xdp_features |= NETDEV_XDP_ACT_NDO_XMIT_SG;
+
+	call_netdevice_notifiers(NETDEV_XDP_FEAT_CHANGE, dev);
 }
 EXPORT_SYMBOL_GPL(xdp_features_set_redirect_target);
 
 void xdp_features_clear_redirect_target(struct net_device *dev)
 {
-	xdp_features_t val = dev->xdp_features;
-
-	val &= ~(NETDEV_XDP_ACT_NDO_XMIT | NETDEV_XDP_ACT_NDO_XMIT_SG);
-	xdp_set_features_flag(dev, val);
+	dev->xdp_features &= ~(NETDEV_XDP_ACT_NDO_XMIT |
+			       NETDEV_XDP_ACT_NDO_XMIT_SG);
+	call_netdevice_notifiers(NETDEV_XDP_FEAT_CHANGE, dev);
 }
 EXPORT_SYMBOL_GPL(xdp_features_clear_redirect_target);

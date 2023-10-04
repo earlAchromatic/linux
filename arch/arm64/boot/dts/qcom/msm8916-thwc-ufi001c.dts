@@ -25,11 +25,6 @@
 	gpios = <&msmgpio 20 GPIO_ACTIVE_HIGH>;
 };
 
-&mpss {
-	pinctrl-0 = <&sim_ctrl_default>;
-	pinctrl-names = "default";
-};
-
 &button_default {
 	pins = "gpio37";
 	bias-pull-down;
@@ -39,25 +34,6 @@
 	pins = "gpio20", "gpio21", "gpio22";
 };
 
-/* This selects the external SIM card slot by default */
-&msmgpio {
-	sim_ctrl_default: sim-ctrl-default-state {
-		esim-sel-pins {
-			pins = "gpio0", "gpio3";
-			bias-disable;
-			output-low;
-		};
-
-		sim-en-pins {
-			pins = "gpio1";
-			bias-disable;
-			output-low;
-		};
-
-		sim-sel-pins {
-			pins = "gpio2";
-			bias-disable;
-			output-high;
-		};
-	};
+&sim_ctrl_default {
+	pins = "gpio1", "gpio2";
 };

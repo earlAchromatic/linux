@@ -6,8 +6,7 @@
 #define _REG_H_
 
 #include <linux/types.h>
-#include <linux/log2.h>
-#include <linux/bug.h>
+#include <linux/bits.h>
 
 /**
  * struct reg - A register descriptor

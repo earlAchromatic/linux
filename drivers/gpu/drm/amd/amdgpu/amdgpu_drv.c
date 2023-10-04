@@ -2467,10 +2467,7 @@ static int amdgpu_pmops_freeze(struct device *dev)
 	adev->in_s4 = false;
 	if (r)
 		return r;
-
-	if (amdgpu_acpi_should_gpu_reset(adev))
-		return amdgpu_asic_reset(adev);
-	return 0;
+	return amdgpu_asic_reset(adev);
 }
 
 static int amdgpu_pmops_thaw(struct device *dev)

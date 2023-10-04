@@ -534,7 +534,7 @@ static int of_serdev_register_devices(struct serdev_controller *ctrl)
 		if (!serdev)
 			continue;
 
-		device_set_node(&serdev->dev, of_fwnode_handle(node));
+		serdev->dev.of_node = node;
 
 		err = serdev_device_add(serdev);
 		if (err) {

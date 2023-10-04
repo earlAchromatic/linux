@@ -379,7 +379,8 @@ static int tcx_probe(struct platform_device *op)
 
 	spin_lock_init(&par->lock);
 
-	par->lowdepth = of_property_read_bool(dp, "tcx-8-bit");
+	par->lowdepth =
+		(of_find_property(dp, "tcx-8-bit", NULL) != NULL);
 
 	sbusfb_fill_var(&info->var, dp, 8);
 	info->var.red.length = 8;

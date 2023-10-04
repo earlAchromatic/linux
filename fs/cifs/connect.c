@@ -212,42 +212,31 @@ cifs_mark_tcp_ses_conns_for_reconnect(struct TCP_Server_Info *server,
 			cifs_chan_update_iface(ses, server);
 
 		spin_lock(&ses->chan_lock);
-		if (!mark_smb_session && cifs_chan_needs_reconnect(ses, server)) {
-			spin_unlock(&ses->chan_lock);
-			continue;
-		}
+		if (!mark_smb_session && cifs_chan_needs_reconnect(ses, server))
+			goto next_session;
 
 		if (mark_smb_session)
 			CIFS_SET_ALL_CHANS_NEED_RECONNECT(ses);
 		else
 			cifs_chan_set_need_reconnect(ses, server);
 
-		cifs_dbg(FYI, "%s: channel connect bitmap: 0x%lx\n",
-			 __func__, ses->chans_need_reconnect);
-
 		/* If all channels need reconnect, then tcon needs reconnect */
-		if (!mark_smb_session && !CIFS_ALL_CHANS_NEED_RECONNECT(ses)) {
-			spin_unlock(&ses->chan_lock);
-			continue;
-		}
-		spin_unlock(&ses->chan_lock);
+		if (!mark_smb_session && !CIFS_ALL_CHANS_NEED_RECONNECT(ses))
+			goto next_session;
 
-		spin_lock(&ses->ses_lock);
 		ses->ses_status = SES_NEED_RECON;
-		spin_unlock(&ses->ses_lock);
 
 		list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
 			tcon->need_reconnect = true;
-			spin_lock(&tcon->tc_lock);
 			tcon->status = TID_NEED_RECON;
-			spin_unlock(&tcon->tc_lock);
 		}
 		if (ses->tcon_ipc) {
 			ses->tcon_ipc->need_reconnect = true;
-			spin_lock(&ses->tcon_ipc->tc_lock);
 			ses->tcon_ipc->status = TID_NEED_RECON;
-			spin_unlock(&ses->tcon_ipc->tc_lock);
 		}
+
+next_session:
+		spin_unlock(&ses->chan_lock);
 	}
 	spin_unlock(&cifs_tcp_ses_lock);
 }
@@ -1732,7 +1721,7 @@ out_err:
 	return ERR_PTR(rc);
 }
 
-/* this function must be called with ses_lock and chan_lock held */
+/* this function must be called with ses_lock held */
 static int match_session(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 {
 	if (ctx->sectype != Unspecified &&
@@ -1743,8 +1732,12 @@ static int match_session(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 	 * If an existing session is limited to less channels than
 	 * requested, it should not be reused
 	 */
-	if (ses->chan_max < ctx->max_channels)
+	spin_lock(&ses->chan_lock);
+	if (ses->chan_max < ctx->max_channels) {
+		spin_unlock(&ses->chan_lock);
 		return 0;
+	}
+	spin_unlock(&ses->chan_lock);
 
 	switch (ses->sectype) {
 	case Kerberos:
@@ -1872,13 +1865,10 @@ cifs_find_smb_ses(struct TCP_Server_Info *server, struct smb3_fs_context *ctx)
 			spin_unlock(&ses->ses_lock);
 			continue;
 		}
-		spin_lock(&ses->chan_lock);
 		if (!match_session(ses, ctx)) {
-			spin_unlock(&ses->chan_lock);
 			spin_unlock(&ses->ses_lock);
 			continue;
 		}
-		spin_unlock(&ses->chan_lock);
 		spin_unlock(&ses->ses_lock);
 
 		++ses->ses_count;
@@ -2239,7 +2229,6 @@ cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb3_fs_context *ctx)
 	 * need to lock before changing something in the session.
 	 */
 	spin_lock(&cifs_tcp_ses_lock);
-	ses->dfs_root_ses = ctx->dfs_root_ses;
 	list_add(&ses->smb_ses_list, &server->smb_ses_list);
 	spin_unlock(&cifs_tcp_ses_lock);
 
@@ -2324,7 +2313,6 @@ cifs_put_tcon(struct cifs_tcon *tcon)
 	WARN_ON(tcon->tc_count < 0);
 
 	list_del_init(&tcon->tcon_list);
-	tcon->status = TID_EXITING;
 	spin_unlock(&tcon->tc_lock);
 	spin_unlock(&cifs_tcp_ses_lock);
 
@@ -2704,7 +2692,6 @@ cifs_match_super(struct super_block *sb, void *data)
 
 	spin_lock(&tcp_srv->srv_lock);
 	spin_lock(&ses->ses_lock);
-	spin_lock(&ses->chan_lock);
 	spin_lock(&tcon->tc_lock);
 	if (!match_server(tcp_srv, ctx, dfs_super_cmp) ||
 	    !match_session(ses, ctx) ||
@@ -2717,7 +2704,6 @@ cifs_match_super(struct super_block *sb, void *data)
 	rc = compare_mount_options(sb, mnt_data);
 out:
 	spin_unlock(&tcon->tc_lock);
-	spin_unlock(&ses->chan_lock);
 	spin_unlock(&ses->ses_lock);
 	spin_unlock(&tcp_srv->srv_lock);
 
@@ -3421,8 +3407,7 @@ int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 	bool isdfs;
 	int rc;
 
-	INIT_LIST_HEAD(&mnt_ctx.dfs_ses_list);
-
+	uuid_gen(&mnt_ctx.mount_id);
 	rc = dfs_mount_share(&mnt_ctx, &isdfs);
 	if (rc)
 		goto error;
@@ -3442,6 +3427,7 @@ int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 	kfree(cifs_sb->prepath);
 	cifs_sb->prepath = ctx->prepath;
 	ctx->prepath = NULL;
+	uuid_copy(&cifs_sb->dfs_mount_id, &mnt_ctx.mount_id);
 
 out:
 	cifs_try_adding_channels(cifs_sb, mnt_ctx.ses);
@@ -3453,7 +3439,7 @@ out:
 	return rc;
 
 error:
-	dfs_put_root_smb_sessions(&mnt_ctx.dfs_ses_list);
+	dfs_cache_put_refsrv_sessions(&mnt_ctx.mount_id);
 	kfree(mnt_ctx.origin_fullpath);
 	kfree(mnt_ctx.leaf_fullpath);
 	cifs_mount_put_conns(&mnt_ctx);
@@ -3651,6 +3637,9 @@ cifs_umount(struct cifs_sb_info *cifs_sb)
 	spin_unlock(&cifs_sb->tlink_tree_lock);
 
 	kfree(cifs_sb->prepath);
+#ifdef CONFIG_CIFS_DFS_UPCALL
+	dfs_cache_put_refsrv_sessions(&cifs_sb->dfs_mount_id);
+#endif
 	call_rcu(&cifs_sb->rcu, delayed_free);
 }
 
@@ -3665,19 +3654,11 @@ cifs_negotiate_protocol(const unsigned int xid, struct cifs_ses *ses,
 
 	/* only send once per connect */
 	spin_lock(&server->srv_lock);
-	if (server->tcpStatus != CifsGood &&
-	    server->tcpStatus != CifsNew &&
+	if (!server->ops->need_neg(server) ||
 	    server->tcpStatus != CifsNeedNegotiate) {
-		spin_unlock(&server->srv_lock);
-		return -EHOSTDOWN;
-	}
-
-	if (!server->ops->need_neg(server) &&
-	    server->tcpStatus == CifsGood) {
 		spin_unlock(&server->srv_lock);
 		return 0;
 	}
-
 	server->tcpStatus = CifsInNegotiate;
 	spin_unlock(&server->srv_lock);
 
@@ -3711,28 +3692,23 @@ cifs_setup_session(const unsigned int xid, struct cifs_ses *ses,
 	bool is_binding = false;
 
 	spin_lock(&ses->ses_lock);
-	cifs_dbg(FYI, "%s: channel connect bitmap: 0x%lx\n",
-		 __func__, ses->chans_need_reconnect);
-
 	if (ses->ses_status != SES_GOOD &&
 	    ses->ses_status != SES_NEW &&
 	    ses->ses_status != SES_NEED_RECON) {
 		spin_unlock(&ses->ses_lock);
-		return -EHOSTDOWN;
+		return 0;
 	}
 
 	/* only send once per connect */
 	spin_lock(&ses->chan_lock);
-	if (CIFS_ALL_CHANS_GOOD(ses)) {
-		if (ses->ses_status == SES_NEED_RECON)
-			ses->ses_status = SES_GOOD;
+	if (CIFS_ALL_CHANS_GOOD(ses) ||
+	    cifs_chan_in_reconnect(ses, server)) {
 		spin_unlock(&ses->chan_lock);
 		spin_unlock(&ses->ses_lock);
 		return 0;
 	}
-
-	cifs_chan_set_in_reconnect(ses, server);
 	is_binding = !CIFS_ALL_CHANS_NEED_RECONNECT(ses);
+	cifs_chan_set_in_reconnect(ses, server);
 	spin_unlock(&ses->chan_lock);
 
 	if (!is_binding)
@@ -4062,13 +4038,9 @@ int cifs_tree_connect(const unsigned int xid, struct cifs_tcon *tcon, const stru
 
 	/* only send once per connect */
 	spin_lock(&tcon->tc_lock);
-	if (tcon->status != TID_NEW &&
-	    tcon->status != TID_NEED_TCON) {
-		spin_unlock(&tcon->tc_lock);
-		return -EHOSTDOWN;
-	}
-
-	if (tcon->status == TID_GOOD) {
+	if (tcon->ses->ses_status != SES_GOOD ||
+	    (tcon->status != TID_NEW &&
+	    tcon->status != TID_NEED_TCON)) {
 		spin_unlock(&tcon->tc_lock);
 		return 0;
 	}

@@ -1048,7 +1048,7 @@ again:
 	 * so there is only one iref. The case that several irefs are
 	 * in the same item doesn't exist.
 	 */
-	ret = btrfs_del_item(trans, root, path);
+	btrfs_del_item(trans, root, path);
 out:
 	btrfs_release_delayed_iref(node);
 	btrfs_release_path(path);

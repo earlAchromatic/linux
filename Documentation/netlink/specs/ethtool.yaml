@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
-
 name: ethtool
 
 protocol: genetlink-legacy
@@ -13,6 +11,7 @@ attribute-sets:
       -
         name: dev-index
         type: u32
+        value: 1
       -
         name: dev-name
         type: string
@@ -26,6 +25,7 @@ attribute-sets:
       -
         name: index
         type: u32
+        value: 1
       -
         name: name
         type: string
@@ -39,12 +39,14 @@ attribute-sets:
         name: bit
         type: nest
         nested-attributes: bitset-bit
+        value: 1
   -
     name: bitset
     attributes:
       -
         name: nomask
         type: flag
+        value: 1
       -
         name: size
         type: u32
@@ -59,6 +61,7 @@ attribute-sets:
       -
         name: index
         type: u32
+        value: 1
       -
         name: value
         type: string
@@ -68,6 +71,7 @@ attribute-sets:
       -
         name: string
         type: nest
+        value: 1
         multi-attr: true
         nested-attributes: string
   -
@@ -76,6 +80,7 @@ attribute-sets:
       -
         name: id
         type: u32
+        value: 1
       -
         name: count
         type: u32
@@ -91,12 +96,14 @@ attribute-sets:
         name: stringset
         type: nest
         multi-attr: true
+        value: 1
         nested-attributes: stringset
   -
     name: strset
     attributes:
       -
         name: header
+        value: 1
         type: nest
         nested-attributes: header
       -
@@ -112,6 +119,7 @@ attribute-sets:
     attributes:
       -
         name: header
+        value: 1
         type: nest
         nested-attributes: header
       -
@@ -124,6 +132,7 @@ attribute-sets:
     attributes:
       -
         name: header
+        value: 1
         type: nest
         nested-attributes: header
       -
@@ -171,6 +180,7 @@ attribute-sets:
     attributes:
       -
         name: pad
+        value: 1
         type: pad
       -
         name: reassembly-errors
@@ -195,6 +205,7 @@ attribute-sets:
     attributes:
       -
         name: header
+        value: 1
         type: nest
         nested-attributes: header
       -
@@ -240,11 +251,13 @@ operations:
 
       do: &strset-get-op
         request:
+          value: 1
           attributes:
             - header
             - stringsets
             - counts-only
         reply:
+          value: 1
           attributes:
             - header
             - stringsets

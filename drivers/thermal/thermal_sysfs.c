@@ -685,8 +685,6 @@ void thermal_cooling_device_stats_update(struct thermal_cooling_device *cdev,
 {
 	struct cooling_dev_stats *stats = cdev->stats;
 
-	lockdep_assert_held(&cdev->lock);
-
 	if (!stats)
 		return;
 
@@ -708,21 +706,12 @@ static ssize_t total_trans_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
-	struct cooling_dev_stats *stats;
-	int ret = 0;
-
-	mutex_lock(&cdev->lock);
-
-	stats = cdev->stats;
-	if (!stats)
-		goto unlock;
+	struct cooling_dev_stats *stats = cdev->stats;
+	int ret;
 
 	spin_lock(&stats->lock);
 	ret = sprintf(buf, "%u\n", stats->total_trans);
 	spin_unlock(&stats->lock);
-
-unlock:
-	mutex_unlock(&cdev->lock);
 
 	return ret;
 }
@@ -732,18 +721,11 @@ time_in_state_ms_show(struct device *dev, struct device_attribute *attr,
 		      char *buf)
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
-	struct cooling_dev_stats *stats;
+	struct cooling_dev_stats *stats = cdev->stats;
 	ssize_t len = 0;
 	int i;
 
-	mutex_lock(&cdev->lock);
-
-	stats = cdev->stats;
-	if (!stats)
-		goto unlock;
-
 	spin_lock(&stats->lock);
-
 	update_time_in_state(stats);
 
 	for (i = 0; i <= cdev->max_state; i++) {
@@ -751,9 +733,6 @@ time_in_state_ms_show(struct device *dev, struct device_attribute *attr,
 			       ktime_to_ms(stats->time_in_state[i]));
 	}
 	spin_unlock(&stats->lock);
-
-unlock:
-	mutex_unlock(&cdev->lock);
 
 	return len;
 }
@@ -763,16 +742,8 @@ reset_store(struct device *dev, struct device_attribute *attr, const char *buf,
 	    size_t count)
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
-	struct cooling_dev_stats *stats;
-	int i, states;
-
-	mutex_lock(&cdev->lock);
-
-	stats = cdev->stats;
-	if (!stats)
-		goto unlock;
-
-	states = cdev->max_state + 1;
+	struct cooling_dev_stats *stats = cdev->stats;
+	int i, states = cdev->max_state + 1;
 
 	spin_lock(&stats->lock);
 
@@ -786,9 +757,6 @@ reset_store(struct device *dev, struct device_attribute *attr, const char *buf,
 
 	spin_unlock(&stats->lock);
 
-unlock:
-	mutex_unlock(&cdev->lock);
-
 	return count;
 }
 
@@ -796,17 +764,9 @@ static ssize_t trans_table_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
-	struct cooling_dev_stats *stats;
+	struct cooling_dev_stats *stats = cdev->stats;
 	ssize_t len = 0;
 	int i, j;
-
-	mutex_lock(&cdev->lock);
-
-	stats = cdev->stats;
-	if (!stats) {
-		len = -ENODATA;
-		goto unlock;
-	}
 
 	len += snprintf(buf + len, PAGE_SIZE - len, " From  :    To\n");
 	len += snprintf(buf + len, PAGE_SIZE - len, "       : ");
@@ -815,10 +775,8 @@ static ssize_t trans_table_show(struct device *dev,
 			break;
 		len += snprintf(buf + len, PAGE_SIZE - len, "state%2u  ", i);
 	}
-	if (len >= PAGE_SIZE) {
-		len = PAGE_SIZE;
-		goto unlock;
-	}
+	if (len >= PAGE_SIZE)
+		return PAGE_SIZE;
 
 	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 
@@ -841,12 +799,8 @@ static ssize_t trans_table_show(struct device *dev,
 
 	if (len >= PAGE_SIZE) {
 		pr_warn_once("Thermal transition table exceeds PAGE_SIZE. Disabling\n");
-		len = -EFBIG;
+		return -EFBIG;
 	}
-
-unlock:
-	mutex_unlock(&cdev->lock);
-
 	return len;
 }
 
@@ -876,8 +830,6 @@ static void cooling_device_stats_setup(struct thermal_cooling_device *cdev)
 	unsigned long states = cdev->max_state + 1;
 	int var;
 
-	lockdep_assert_held(&cdev->lock);
-
 	var = sizeof(*stats);
 	var += sizeof(*stats->time_in_state) * states;
 	var += sizeof(*stats->trans_table) * states * states;
@@ -903,8 +855,6 @@ out:
 
 static void cooling_device_stats_destroy(struct thermal_cooling_device *cdev)
 {
-	lockdep_assert_held(&cdev->lock);
-
 	kfree(cdev->stats);
 	cdev->stats = NULL;
 }
@@ -927,12 +877,6 @@ void thermal_cooling_device_setup_sysfs(struct thermal_cooling_device *cdev)
 void thermal_cooling_device_destroy_sysfs(struct thermal_cooling_device *cdev)
 {
 	cooling_device_stats_destroy(cdev);
-}
-
-void thermal_cooling_device_stats_reinit(struct thermal_cooling_device *cdev)
-{
-	cooling_device_stats_destroy(cdev);
-	cooling_device_stats_setup(cdev);
 }
 
 /* these helper will be used only at the time of bindig */

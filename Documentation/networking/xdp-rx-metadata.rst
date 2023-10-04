@@ -23,13 +23,10 @@ metadata is supported, this set will grow:
 An XDP program can use these kfuncs to read the metadata into stack
 variables for its own consumption. Or, to pass the metadata on to other
 consumers, an XDP program can store it into the metadata area carried
-ahead of the packet. Not all packets will necessary have the requested
-metadata available in which case the driver returns ``-ENODATA``.
+ahead of the packet.
 
 Not all kfuncs have to be implemented by the device driver; when not
-implemented, the default ones that return ``-EOPNOTSUPP`` will be used
-to indicate the device driver have not implemented this kfunc.
-
+implemented, the default ones that return ``-EOPNOTSUPP`` will be used.
 
 Within an XDP frame, the metadata layout (accessed via ``xdp_buff``) is
 as follows::

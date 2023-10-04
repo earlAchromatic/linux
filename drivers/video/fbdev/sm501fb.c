@@ -1737,10 +1737,10 @@ static int sm501fb_init_fb(struct fb_info *fb, enum sm501_controller head,
 
 #if defined(CONFIG_OF)
 #ifdef __BIG_ENDIAN
-	if (of_property_read_bool(info->dev->parent->of_node, "little-endian"))
+	if (of_get_property(info->dev->parent->of_node, "little-endian", NULL))
 		fb->flags |= FBINFO_FOREIGN_ENDIAN;
 #else
-	if (of_property_read_bool(info->dev->parent->of_node, "big-endian"))
+	if (of_get_property(info->dev->parent->of_node, "big-endian", NULL))
 		fb->flags |= FBINFO_FOREIGN_ENDIAN;
 #endif
 #endif
